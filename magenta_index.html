@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Magenta MIDI Generator</title>
+  <script src="https://cdn.jsdelivr.net/npm/@magenta/music@1.25.0/dist/magentamusic.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
+
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    #status {
+      color: #666;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <h3>Magenta RNN Melody Generator</h3>
+  <button id="generate">Generate melody</button>
+  <button id="download">Download MIDI</button>
+  <div id="status">Loading model...</div>
+  <audio id="player" controls></audio>
+
+  <script>
+    const model = new mm.MusicRNN(
+      "https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/basic_rnn"
+    );
+    const player = new mm.Player();
+    let lastSequence = null;
+
+    async function init() {
+      try {
+        await model.initialize();
+        document.getElementById("status").textContent = "Model loaded! Click Generate.";
+      } catch (e) {
+        document.getElementById("status").textContent = "Error loading model: " + e.message;
+      }
+    }
+    init();
+
+    document.getElementById("generate").onclick = async () => {
+      const btn = document.getElementById("generate");
+      const status = document.getElementById("status");
+      btn.disabled = true;
+      status.textContent = "Generating melody...";
+      try {
+        const seed = {
+          notes: [{ pitch: 60, startTime: 0, endTime: 0.5 }],
+          totalTime: 0.5
+        };
+        const result = await model.continueSequence(seed, 32, 1.0);
+        lastSequence = result;
+        player.start(lastSequence);
+        const midiBytes = mm.sequenceProtoToMidi(result);
+        const blob = new Blob([midiBytes], { type: "audio/midi" });
+        const url = URL.createObjectURL(blob);
+        document.getElementById("player").src = url;
+        btn.disabled = false;
+        status.textContent = "Done! Click Download MIDI to save.";
+      } catch (e) {
+        btn.disabled = false;
+        status.textContent = "Error: " + e.message;
+      }
+    };
+
+    document.getElementById("download").onclick = () => {
+      if (!lastSequence) { alert("Generate first!"); return; }
+      const midiBytes = mm.sequenceProtoToMidi(lastSequence);
+      const blob = new Blob([midiBytes], { type: "audio/midi" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "melody.mid"; a.click();
+    };
+  </script>
+</body>
+
+</html>
